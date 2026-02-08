@@ -5,11 +5,10 @@ import dynamic from 'next/dynamic';
 import { FilterPanel } from '@/components/FilterPanel';
 import { DispensaryCard } from '@/components/DispensaryCard';
 import { AgeGate } from '@/components/AgeGate';
-import { demoDispensaries } from '@/lib/demo-data';
+import { demoDispensaries, Dispensary } from '@/lib/demo-data';
 import { isPointInPolygon, calculateDistance } from '@/lib/geo-utils';
 import { Map, List, Share2 } from 'lucide-react';
 
-// Dynamic import MapView to prevent SSR issues with Leaflet
 const MapView = dynamic(
   () => import('@/components/MapView').then((mod) => ({ default: mod.MapView })),
   { 
@@ -24,6 +23,8 @@ const MapView = dynamic(
     )
   }
 );
+
+type DispensaryWithDistance = Dispensary & { distance: number };
 
 export default function Home() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -45,7 +46,6 @@ export default function Home() {
           setUserLocation([position.coords.latitude, position.coords.longitude]);
         },
         () => {
-          // Fallback to SF coordinates
           setUserLocation([37.7749, -122.4194]);
         }
       );
@@ -55,16 +55,14 @@ export default function Home() {
   }, []);
 
   const filteredDispensaries = useMemo(() => {
-    let results = [...demoDispensaries];
+    let results: (Dispensary | DispensaryWithDistance)[] = [...demoDispensaries];
 
-    // Polygon filter
     if (polygon) {
       results = results.filter((d) =>
         isPointInPolygon([d.lng, d.lat], polygon)
       );
     }
 
-    // Search filter
     if (searchTerm) {
       results = results.filter(
         (d) =>
@@ -73,29 +71,24 @@ export default function Home() {
       );
     }
 
-    // Category filter
     if (selectedCategory) {
       results = results.filter((d) =>
         d.deals?.some((deal) => deal.category === selectedCategory)
       );
     }
 
-    // License type filter
     if (selectedLicenseType) {
       results = results.filter((d) => d.licenseType === selectedLicenseType || d.licenseType === 'both');
     }
 
-    // Open now filter
     if (showOpenOnly) {
       results = results.filter((d) => d.isOpen);
     }
 
-    // Has deals filter
     if (showDealsOnly) {
       results = results.filter((d) => d.deals && d.deals.length > 0);
     }
 
-    // Distance and price filters
     if (userLocation) {
       results = results
         .map((d) => ({
@@ -109,7 +102,6 @@ export default function Home() {
         }))
         .filter((d) => d.distance <= maxDistance);
 
-      // Price range filter (only if category selected)
       if (selectedCategory) {
         results = results.filter((d) =>
           d.deals?.some(
@@ -121,14 +113,12 @@ export default function Home() {
         );
       }
 
-      // Sort by distance
-      results.sort((a, b) => a.distance - b.distance);
+      results.sort((a, b) => (a as DispensaryWithDistance).distance - (b as DispensaryWithDistance).distance);
     } else {
-      // Sort by rating if no location
       results.sort((a, b) => b.rating - a.rating);
     }
 
-    return results;
+    return results as DispensaryWithDistance[];
   }, [
     searchTerm,
     selectedCategory,
@@ -240,7 +230,7 @@ export default function Home() {
                 <DispensaryCard
                   key={dispensary.id}
                   dispensary={dispensary}
-                  distance={(dispensary as any).distance}
+                  distance={dispensary.distance}
                   isSelected={selectedId === dispensary.id}
                   onClick={() => setSelectedId(dispensary.id)}
                 />
@@ -283,7 +273,7 @@ export default function Home() {
                   <DispensaryCard
                     key={dispensary.id}
                     dispensary={dispensary}
-                    distance={(dispensary as any).distance}
+                    distance={dispensary.distance}
                     isSelected={selectedId === dispensary.id}
                     onClick={() => {
                       setSelectedId(dispensary.id);
